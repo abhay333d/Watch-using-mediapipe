@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <script
+      src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"
+      crossorigin="anonymous"
+    ></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.136.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.136.0/examples/js/loaders/GLTFLoader.js"></script>
+  </head>
+
+  <body>
+    <div class="container">
+      <video class="input_video"></video>
+      <canvas class="output_canvas" width="1280px" height="720px"></canvas>
+    </div>
+    <style>
+      .container {
+        position: relative;
+        width: 1280px;
+        height: 720px;
+      }
+      .input_video {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        z-index: 1;
+      }
+      .output_canvas {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        z-index: 2;
+      }
+      canvas.webgl {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        z-index: 3;
+      }
+    </style>
+    <script type="module">
+      // DOM Elements
+      const videoElement = document.getElementsByClassName("input_video")[0];
+      const canvasElement = document.getElementsByClassName("output_canvas")[0];
+      const canvasCtx = canvasElement.getContext("2d");
+
+      // Three.js Scene Setup
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(75, 1280 / 720, 0.1, 1000);
+      const renderer = new THREE.WebGLRenderer({ alpha: true });
+      renderer.setSize(1280, 720);
+      renderer.domElement.classList.add("webgl");
+      document.querySelector(".container").appendChild(renderer.domElement);
+
+      // Add Light to the Scene
+      const light = new THREE.DirectionalLight(0xffffff, 1);
+      light.position.set(0, 1, 1).normalize();
+      scene.add(light);
+
+      // Load the 3D Watch Model
+      const loader = new THREE.GLTFLoader();
+      let watch;
+      loader.load(
+        "./assets/watch.glb", // Replace with your model URL
+        (gltf) => {
+          watch = gltf.scene;
+          watch.scale.set(0.04, 0.04, 0.04); // Adjust scale if necessary
+          scene.add(watch);
+        }
+      );
+
+      // Position camera in the 3D scene
+      camera.position.z = 2;
+
+      function onResults(results) {
+        canvasCtx.save();
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        canvasCtx.drawImage(
+          results.image,
+          0,
+          0,
+          canvasElement.width,
+          canvasElement.height
+        );
+
+        if (results.multiHandLandmarks) {
+          for (const landmarks of results.multiHandLandmarks) {
+            drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {
+              color: "#00FF00",
+              lineWidth: 5,
+            });
+            drawLandmarks(canvasCtx, landmarks, {
+              color: "#FF0000",
+              lineWidth: 2,
+            });
+
+            // Track wrist (landmark 0)
+            const wrist = landmarks[0];
+            if (watch) {
+              // Convert normalized wrist coordinates to Three.js coordinates
+              const x = (wrist.x - 0.5) * 2; // Convert to range [-1, 1]
+              const y = -(wrist.y - 0.5) * 2; // Convert to range [-1, 1]
+              const z = -wrist.z * 2; // Adjust depth scaling if necessary
+
+              watch.position.set(x, y, z);
+            }
+          }
+        }
+        canvasCtx.restore();
+
+        // Render the Three.js scene
+        renderer.render(scene, camera);
+      }
+
+      const hands = new Hands({
+        locateFile: (file) => {
+          return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        },
+      });
+      hands.setOptions({
+        maxNumHands: 2,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      });
+      hands.onResults(onResults);
+
+      const mpCamera = new Camera(videoElement, {
+        onFrame: async () => {
+          await hands.send({ image: videoElement });
+        },
+        width: 1280,
+        height: 720,
+      });
+      mpCamera.start();
+    </script>
+  </body>
+</html>
