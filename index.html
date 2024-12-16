@@ -89,7 +89,7 @@
       });
 
       // Add Light to the Scene
-      const light = new THREE.DirectionalLight(0xffffff, 1);
+      const light = new THREE.DirectionalLight(0xffffff, 6);
       light.position.set(0, 1, 1).normalize();
       scene.add(light);
 
@@ -101,6 +101,7 @@
         (gltf) => {
           watch = gltf.scene;
           watch.scale.set(0.04, 0.04, 0.04); // Adjust scale if necessary
+          // watch.rotation.y = -Math.PI / 2;
           scene.add(watch);
         }
       );
@@ -127,24 +128,36 @@
             });
             drawLandmarks(canvasCtx, landmarks, {
               color: "#FF0000",
-              radius: 2, // Smaller radius for landmarks
+              radius: 2,
             });
 
-            // Track wrist (landmark 0)
+            // Extract wrist (landmark 0) and other landmarks
             const wrist = landmarks[0];
+            const indexBase = landmarks[5]; // Base of the index finger
+            const pinkyBase = landmarks[17]; // Base of the pinky finger
+
             if (watch) {
-              // Convert normalized wrist coordinates to Three.js coordinates
-              const x = (wrist.x - 0.5) * 2; // Convert to range [-1, 1]
-              const y = -(wrist.y - 0.5) * 2; // Convert to range [-1, 1]
-              const z = -wrist.z * 2; // Adjust depth scaling if necessary
+              // Compute Position
+              const x = (wrist.x - 0.5) * 6.7; // Adjust scaling and centering
+              const y = -(wrist.y - 0.5) * 3.8;
+              const z = -wrist.z * 2 - 0.1;
 
               watch.position.set(x, y, z);
+
+              // Compute Rotation
+              const dx = pinkyBase.x - indexBase.x; // Horizontal hand direction
+              const dy = pinkyBase.y - indexBase.y; // Vertical tilt direction
+              const dz = pinkyBase.z - indexBase.z;
+
+              // Calculate rotation angles (Euler angles)
+              const rotationY = Math.atan2(dx, dz) - 1; // Yaw (left-right rotation)
+              const rotationX = Math.atan2(dy, dz) - 0.3; // Pitch (up-down rotation)
+
+              watch.rotation.set(rotationX, rotationY, 1.4); // Apply rotations
             }
           }
         }
         canvasCtx.restore();
-
-        // Render the Three.js scene
         renderer.render(scene, camera);
       }
 
@@ -154,7 +167,7 @@
         },
       });
       hands.setOptions({
-        maxNumHands: 2,
+        maxNumHands: 1,
         modelComplexity: 1,
         minDetectionConfidence: 0.5,
         minTrackingConfidence: 0.5,
